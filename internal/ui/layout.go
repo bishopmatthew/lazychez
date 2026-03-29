@@ -477,6 +477,11 @@ func (m Model) helpContent() string {
     enter       Lock filter (navigate matches)
     esc         Cancel / exit filter mode
 ` + "\n" +
+		heading.Render("  Mouse") + `
+    click       Focus pane / select file
+    scroll      Navigate lists and diff
+    click outside overlay  Dismiss overlay
+` + "\n" +
 		heading.Render("  General") + `
     r           Refresh all panes
     C           Edit chezmoi config

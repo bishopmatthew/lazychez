@@ -12,12 +12,13 @@ type GitStatusEntry struct {
 }
 
 type GitStatusModel struct {
-	entries []GitStatusEntry
-	cursor  int
-	offset  int
-	focused bool
-	width   int
-	height  int
+	entries    []GitStatusEntry
+	cursor     int
+	offset     int
+	focused    bool
+	showCursor bool // keep cursor highlight when providing context for the diff pane
+	width      int
+	height     int
 }
 
 func NewGitStatusModel() GitStatusModel {
@@ -85,6 +86,15 @@ func (m GitStatusModel) HasStagedFiles() bool {
 
 func (m GitStatusModel) ContentLines() int {
 	return len(m.entries)
+}
+
+// SetCursor moves the cursor to the given index, clamping to bounds.
+func (m *GitStatusModel) SetCursor(index int) {
+	if index < 0 || index >= len(m.entries) {
+		return
+	}
+	m.cursor = index
+	m.clampOffset()
 }
 
 func (m *GitStatusModel) MoveUp() {
@@ -158,7 +168,7 @@ func (m GitStatusModel) View() string {
 	var lines []string
 	for i := m.offset; i < end; i++ {
 		e := m.entries[i]
-		selected := i == m.cursor && m.focused
+		selected := i == m.cursor && (m.focused || m.showCursor)
 
 		xyStr := colorizeXY(e.XY, selected)
 

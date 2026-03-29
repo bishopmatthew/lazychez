@@ -332,6 +332,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TickMsg:
 		return m, tea.Batch(m.refreshLists(), scheduleRefreshTick())
 
+	case tea.MouseMsg:
+		updated, cmd := m.handleMouse(msg)
+		return updated, cmd
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -780,7 +784,7 @@ func (m *Model) updateDimensions() {
 }
 
 func (m *Model) updateDimensionsWide() {
-	leftWidth := m.width * 30 / 100
+	leftWidth := m.width / 3
 	rightWidth := m.width - leftWidth
 	contentHeight := m.height - 2
 
@@ -819,6 +823,9 @@ func (m *Model) syncFocus() {
 	m.diffView.SetFocused(m.focused == PaneInfo)
 
 	ctx := m.detailPaneContext()
+	m.fileList.showCursor = m.focused == PaneInfo && ctx == PaneFileList
+	m.gitStatus.showCursor = m.focused == PaneInfo && ctx == PaneGitStatus
+
 	switch {
 	case ctx == PaneGitStatus:
 		m.diffView.SetContext("git")

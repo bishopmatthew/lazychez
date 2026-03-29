@@ -60,8 +60,12 @@ type FileListModel struct {
 	// Tree view state
 	collapsed map[string]bool // dir path → collapsed, persists across refreshes
 
+	// showCursor keeps the cursor highlight visible when this pane provides
+	// context for the focused diff pane (even though the pane itself isn't focused).
+	showCursor bool
+
 	// Filter state
-	filterMode  FilterMode
+	filterMode FilterMode
 	filterInput textinput.Model
 	savedCursor int // cursor position before filter was activated
 }
@@ -209,6 +213,19 @@ func (m FileListModel) DirtyCount() int {
 	return count
 }
 
+// SetCursor moves the cursor to the given index, clamping to bounds.
+// If the target is a heading, the cursor stays unchanged.
+func (m *FileListModel) SetCursor(index int) {
+	if index < 0 || index >= len(m.files) {
+		return
+	}
+	if m.files[index].IsHeading {
+		return
+	}
+	m.cursor = index
+	m.clampOffset()
+}
+
 // MoveUp moves cursor up, skipping headings.
 func (m *FileListModel) MoveUp() {
 	for i := m.cursor - 1; i >= 0; i-- {
@@ -337,7 +354,7 @@ func (m FileListModel) View() string {
 			continue
 		}
 
-		selected := i == m.cursor && m.focused && m.filterMode != FilterTyping
+		selected := i == m.cursor && (m.focused || m.showCursor) && m.filterMode != FilterTyping
 		indent := strings.Repeat("   ", f.TreeDepth)
 
 		if f.IsDir {
