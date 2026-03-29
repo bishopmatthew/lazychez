@@ -20,6 +20,7 @@ lazychez gives chezmoi a proper terminal UI. Browse your managed files, see what
 - **Fuzzy file filter** — type `/` to narrow the file list instantly, lock the filter with `Enter`, work on just the matches
 - **Forget files** — remove files from chezmoi management when you're done with them
 - **Responsive layout** — side-by-side on wide terminals, stacked on narrow ones
+- **Mouse support** — click to focus panes, click to select files, scroll any pane under the cursor
 - **Vim-style navigation** — btw
 
 ## Install
@@ -134,6 +135,17 @@ lazychez wraps the `chezmoi` and `git` CLIs under the hood. It calls `chezmoi ma
 | `p`     | Pull from remote                    |
 | `P`     | Push to remote                      |
 | `D`     | Discard changes (with confirmation) |
+
+</details>
+
+<details>
+<summary><strong>Mouse</strong></summary>
+
+| Input                  | Action                          |
+| ---------------------- | ------------------------------- |
+| Click                  | Focus pane / select file        |
+| Scroll                 | Navigate lists and diff         |
+| Click outside overlay  | Dismiss overlay                 |
 
 </details>
 
