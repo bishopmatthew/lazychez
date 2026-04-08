@@ -65,7 +65,7 @@ type FileListModel struct {
 	showCursor bool
 
 	// Filter state
-	filterMode FilterMode
+	filterMode  FilterMode
 	filterInput textinput.Model
 	savedCursor int // cursor position before filter was activated
 }
@@ -449,7 +449,7 @@ func renderTemplateSuffix(selected bool) string {
 
 // renderStatusChar colors a single status character based on its value.
 func renderStatusChar(ch rune, selected bool) string {
-	var color lipgloss.Color
+	var color lipgloss.TerminalColor
 	switch ch {
 	case 'M':
 		color = ModifiedColor

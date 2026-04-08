@@ -2,31 +2,39 @@ package ui
 
 import "github.com/charmbracelet/lipgloss"
 
+func adaptiveColor(light, dark string) lipgloss.AdaptiveColor {
+	return lipgloss.AdaptiveColor{Light: light, Dark: dark}
+}
+
 var (
 	// Border colors
-	ActiveBorderColor   = lipgloss.Color("#81cae4")
-	InactiveBorderColor = lipgloss.Color("#5a7a86")
+	ActiveBorderColor   = adaptiveColor("#0F6E8C", "#81CAE4")
+	InactiveBorderColor = adaptiveColor("#6B7F87", "#5A7A86")
 
-	// Text color (soft white)
-	TextColor = lipgloss.Color("#E9F6FB")
+	// Base text colors
+	TextColor  = adaptiveColor("#102129", "#E9F6FB")
+	MutedColor = adaptiveColor("#5F7077", "#5A7A86")
 
 	// Semantic colors
-	ModifiedColor = lipgloss.Color("#e4cd81")
-	AddedColor    = lipgloss.Color("#98e481")
-	DeletedColor  = lipgloss.Color("#e48281")
-	TitleColor    = lipgloss.Color("#81cae4")
-	SelectedBg    = lipgloss.Color("#114a5f")
-	MutedColor    = lipgloss.Color("#5a7a86")
-	DirColor      = lipgloss.Color("#A2C5D2")
-	TemplateColor = lipgloss.Color("#26D6D9")
-	SuccessColor  = lipgloss.Color("#98e481")
-	ErrorColor    = lipgloss.Color("#e48281")
+	ModifiedColor = adaptiveColor("#8A6400", "#E4CD81")
+	AddedColor    = adaptiveColor("#1E7A1E", "#98E481")
+	DeletedColor  = adaptiveColor("#B42318", "#E48281")
+	TitleColor    = adaptiveColor("#0F6E8C", "#81CAE4")
+	SelectedBg    = adaptiveColor("#D7ECF4", "#114A5F")
+	DirColor      = adaptiveColor("#295D70", "#A2C5D2")
+	TemplateColor = adaptiveColor("#006F7A", "#26D6D9")
+	SuccessColor  = adaptiveColor("#1E7A1E", "#98E481")
+	ErrorColor    = adaptiveColor("#B42318", "#E48281")
 
 	// Diff colors
-	DiffAddColor  = lipgloss.Color("#98e481")
-	DiffDelColor  = lipgloss.Color("#e48281")
-	DiffHunkColor = lipgloss.Color("#9c81e4")
-	DiffMetaColor = lipgloss.Color("#5a7a86")
+	DiffAddColor  = adaptiveColor("#1E7A1E", "#98E481")
+	DiffDelColor  = adaptiveColor("#B42318", "#E48281")
+	DiffHunkColor = adaptiveColor("#6C46C0", "#9C81E4")
+	DiffMetaColor = adaptiveColor("#5F7077", "#5A7A86")
+
+	// Overlay colors
+	OverlayBackgroundColor = adaptiveColor("#F7FAFB", "#172B32")
+	OverlayBackdropColor   = adaptiveColor("#DCE9EE", "#172B32")
 
 	// Pane styles
 	ActivePane = lipgloss.NewStyle().
@@ -60,9 +68,9 @@ var (
 	DiffMeta = lipgloss.NewStyle().Foreground(DiffMetaColor)
 
 	// Footer
-	HelpKey  = lipgloss.NewStyle().Foreground(ActiveBorderColor).Bold(true)
-	HelpDesc = lipgloss.NewStyle().Foreground(MutedColor)
-	HelpSep  = lipgloss.NewStyle().Foreground(MutedColor)
+	HelpKey    = lipgloss.NewStyle().Foreground(ActiveBorderColor).Bold(true)
+	HelpDesc   = lipgloss.NewStyle().Foreground(MutedColor)
+	HelpSep    = lipgloss.NewStyle().Foreground(MutedColor)
 	FooterLink = lipgloss.NewStyle().Foreground(TextColor).Underline(true)
 
 	// Status bar
@@ -78,5 +86,5 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(ActiveBorderColor).
 			Padding(1, 2).
-			Background(lipgloss.Color("#172b32"))
+			Background(OverlayBackgroundColor)
 )

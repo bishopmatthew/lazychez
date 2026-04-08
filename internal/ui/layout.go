@@ -434,7 +434,7 @@ func (m Model) renderOverlay(background, overlay string) string {
 		lipgloss.Center, lipgloss.Center,
 		overlay,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#172b32")),
+		lipgloss.WithWhitespaceForeground(OverlayBackdropColor),
 	)
 }
 
