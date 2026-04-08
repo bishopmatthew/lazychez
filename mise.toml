@@ -1,0 +1,3 @@
+[tasks.install]
+description = "Build and install lazychez to ~/.local/bin/"
+run = "go build -o ~/.local/bin/lazychez ."
