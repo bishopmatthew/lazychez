@@ -61,6 +61,10 @@ func (m Model) View() string {
 		screen = m.renderOverlay(screen, m.renderHelp())
 	case OverlayCommit:
 		screen = m.renderOverlay(screen, m.renderCommitInput())
+	case OverlayConfirmApply:
+		screen = m.renderOverlay(screen, m.renderConfirmApply())
+	case OverlayConfirmReAdd:
+		screen = m.renderOverlay(screen, m.renderConfirmReAdd())
 	case OverlayConfirmApplyAll:
 		screen = m.renderOverlay(screen, m.renderConfirmApplyAll())
 	case OverlayConfirmGitDiscard:
@@ -486,8 +490,8 @@ func (m Model) helpContent() string {
     esc         Back from diff panel
 ` + "\n" +
 		heading.Render("  Chezmoi Actions") + `
-    s           Re-add file (dest → source)
-    a           Apply file (source → dest)
+	    s           Re-add file (prompts on overwrite/delete)
+	    a           Apply file (prompts on overwrite/delete)
     A           Apply all files
     t           Toggle template preview (chezmoi cat)
     e           Edit source (chezmoi edit)
@@ -500,7 +504,7 @@ func (m Model) helpContent() string {
     c           Commit (opens input)
     p           Pull from remote
     P           Push to remote
-    D           Discard changes
+	    D           Discard changes (prompts before restore/delete)
 ` + "\n" +
 		heading.Render("  Filter (File List)") + `
     /           Start filtering files
@@ -573,6 +577,26 @@ func (m Model) renderCommitInput() string {
 	return OverlayStyle.Width(50).Render(content)
 }
 
+func (m Model) renderConfirmApply() string {
+	content := fmt.Sprintf(
+		"%s\n\n%s\n\n%s",
+		PaneTitle.Render("Confirm Apply"),
+		m.confirmApplyText(),
+		HelpKey.Render("y")+" yes  "+HelpKey.Render("n")+" no",
+	)
+	return OverlayStyle.Render(content)
+}
+
+func (m Model) renderConfirmReAdd() string {
+	content := fmt.Sprintf(
+		"%s\n\n%s\n\n%s",
+		PaneTitle.Render("Confirm Re-Add"),
+		m.confirmReAddText(),
+		HelpKey.Render("y")+" yes  "+HelpKey.Render("n")+" no",
+	)
+	return OverlayStyle.Render(content)
+}
+
 func (m Model) renderConfirmApplyAll() string {
 	content := fmt.Sprintf(
 		"%s\n\n%s\n\n%s",
@@ -615,13 +639,37 @@ func (m Model) renderConfirmStageAll() string {
 }
 
 func (m Model) renderConfirmGitDiscard() string {
+	var body string
+	if m.discardUntracked {
+		body = fmt.Sprintf("Delete untracked %s from the repo working tree?", m.discardPath)
+	} else {
+		body = fmt.Sprintf("Restore %s to HEAD and discard local changes?", m.discardPath)
+	}
 	content := fmt.Sprintf(
 		"%s\n\n%s\n\n%s",
 		PaneTitle.Render("Confirm Discard"),
-		fmt.Sprintf("Discard changes to %s?", m.discardPath),
+		body,
 		HelpKey.Render("y")+" yes  "+HelpKey.Render("n")+" no",
 	)
 	return OverlayStyle.Render(content)
+}
+
+func (m Model) confirmApplyText() string {
+	switch m.confirmRisk {
+	case 'D':
+		return fmt.Sprintf("Apply %s and remove it from the destination?", m.confirmPath)
+	default:
+		return fmt.Sprintf("Apply %s and overwrite the destination file?", m.confirmPath)
+	}
+}
+
+func (m Model) confirmReAddText() string {
+	switch m.confirmRisk {
+	case 'D':
+		return fmt.Sprintf("Re-add %s and remove the managed source file?", m.confirmPath)
+	default:
+		return fmt.Sprintf("Re-add %s and overwrite the managed source file?", m.confirmPath)
+	}
 }
 
 // posInfo formats a "X of Y" string, or empty if total is 0.
@@ -659,7 +707,6 @@ func (m Model) renderInfoContent() string {
 	b.WriteString(muted.Render("  © 2026 Nick Rotondo"))
 	return b.String()
 }
-
 
 // hyperlink wraps text in an OSC 8 terminal hyperlink escape sequence.
 func hyperlink(url, text string) string {

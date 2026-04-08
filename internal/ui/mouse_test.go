@@ -1095,6 +1095,8 @@ func TestHandleMouse_OverlayClickOutsideDismisses(t *testing.T) {
 		{"commit", OverlayCommit, func(m *Model) {
 			m.commitInput.Focus()
 		}},
+		{"confirm apply", OverlayConfirmApply, nil},
+		{"confirm re-add", OverlayConfirmReAdd, nil},
 		{"confirm apply all", OverlayConfirmApplyAll, nil},
 		{"confirm discard", OverlayConfirmGitDiscard, nil},
 		{"confirm forget", OverlayConfirmForget, nil},
@@ -1140,6 +1142,8 @@ func TestHandleMouse_OverlayClickInsideDoesNotDismiss(t *testing.T) {
 		{"commit", OverlayCommit, func(m *Model) {
 			m.commitInput.Focus()
 		}},
+		{"confirm apply", OverlayConfirmApply, nil},
+		{"confirm re-add", OverlayConfirmReAdd, nil},
 		{"confirm apply all", OverlayConfirmApplyAll, nil},
 		{"confirm discard", OverlayConfirmGitDiscard, nil},
 		{"confirm forget", OverlayConfirmForget, nil},
@@ -1533,9 +1537,9 @@ func TestHitTest_NarrowCollapsedBars(t *testing.T) {
 
 func TestHandleMouse_NarrowClickCollapsedBarExpandsPane(t *testing.T) {
 	tests := []struct {
-		name        string
-		startFocus  PaneID
-		clickPane   PaneID
+		name       string
+		startFocus PaneID
+		clickPane  PaneID
 	}{
 		{"click collapsed GitStatus", PaneFileList, PaneGitStatus},
 		{"click collapsed Status", PaneFileList, PaneStatus},

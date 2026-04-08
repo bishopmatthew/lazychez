@@ -136,6 +136,10 @@ func (m Model) overlayRect() (Rect, bool) {
 		rendered = m.renderHelp()
 	case OverlayCommit:
 		rendered = m.renderCommitInput()
+	case OverlayConfirmApply:
+		rendered = m.renderConfirmApply()
+	case OverlayConfirmReAdd:
+		rendered = m.renderConfirmReAdd()
 	case OverlayConfirmApplyAll:
 		rendered = m.renderConfirmApplyAll()
 	case OverlayConfirmGitDiscard:
@@ -281,10 +285,10 @@ func (m Model) handleOverlayScroll(up bool) (Model, tea.Cmd) {
 // AddFile content layout: row 0 = title, row 1 = status, rows 2..N = file items.
 func (m Model) handleAddFileOverlayClick(msg tea.MouseMsg, rect Rect) (Model, tea.Cmd) {
 	const (
-		overlayBorderX  = 1
-		overlayPaddingX = 2
-		overlayBorderY  = 1
-		overlayPaddingY = 1
+		overlayBorderX    = 1
+		overlayPaddingX   = 2
+		overlayBorderY    = 1
+		overlayPaddingY   = 1
 		contentHeaderRows = 2 // title + status line
 	)
 

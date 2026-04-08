@@ -85,8 +85,9 @@ type PullResultMsg struct {
 }
 
 type GitDiscardResultMsg struct {
-	Path string
-	Err  error
+	Path    string
+	Deleted bool
+	Err     error
 }
 
 type EditorFinishedMsg struct {
@@ -94,11 +95,12 @@ type EditorFinishedMsg struct {
 }
 
 type AheadBehindMsg struct {
-	Ahead  int
-	Behind int
-	Branch string
-	Remote string
-	Err    error
+	Ahead     int
+	Behind    int
+	Branch    string
+	Remote    string
+	HasRemote bool
+	Err       error
 }
 
 // UI messages

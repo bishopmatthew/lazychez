@@ -9,22 +9,22 @@ import (
 
 // mockChezmoiRunner implements chezmoi.Runner for testing.
 type mockChezmoiRunner struct {
-	managedFiles    []chezmoi.ManagedFile
-	managedErr      error
-	unmanagedFiles  []string
-	unmanagedErr    error
-	statusEntries   []chezmoi.StatusEntry
-	statusErr       error
-	diffOutput      map[string]string
-	diffErr         map[string]error
-	catOutput       map[string]string
-	catErr          map[string]error
-	addErr          map[string]error
-	addNewErr       map[string]error
-	applyErr        map[string]error
-	applyAllErr     error
-	forgetErr       map[string]error
-	sourcePath      string
+	managedFiles   []chezmoi.ManagedFile
+	managedErr     error
+	unmanagedFiles []string
+	unmanagedErr   error
+	statusEntries  []chezmoi.StatusEntry
+	statusErr      error
+	diffOutput     map[string]string
+	diffErr        map[string]error
+	catOutput      map[string]string
+	catErr         map[string]error
+	addErr         map[string]error
+	addNewErr      map[string]error
+	applyErr       map[string]error
+	applyAllErr    error
+	forgetErr      map[string]error
+	sourcePath     string
 
 	addCalls       []string
 	addNewCalls    []string
@@ -100,30 +100,30 @@ func (m *mockChezmoiRunner) SourcePath() string {
 
 // mockGitRunner implements git.Runner for testing.
 type mockGitRunner struct {
-	statusEntries    []git.StatusEntry
-	statusErr        error
-	diffOutput       map[string]string
-	diffErr          map[string]error
-	addErr           map[string]error
-	addAllErr        error
-	commitErr        error
-	pushErr          error
-	pullErr          error
-	resetErr         map[string]error
-	restoreErr       map[string]error
-	cleanErr         map[string]error
-	aheadBehindInfo  git.AheadBehindInfo
-	aheadBehindErr   error
+	statusEntries   []git.StatusEntry
+	statusErr       error
+	diffOutput      map[string]string
+	diffErr         map[string]error
+	addErr          map[string]error
+	addAllErr       error
+	commitErr       error
+	pushErr         error
+	pullErr         error
+	resetErr        map[string]error
+	restoreErr      map[string]error
+	cleanErr        map[string]error
+	aheadBehindInfo git.AheadBehindInfo
+	aheadBehindErr  error
 
-	addCalls           []string
-	addAllCalled       bool
-	commitCalls        []string
-	pushCalled         bool
-	pullCalled         bool
-	resetCalls         []string
-	restoreCalls       []string
-	cleanCalls         []string
-	aheadBehindCalled  bool
+	addCalls          []string
+	addAllCalled      bool
+	commitCalls       []string
+	pushCalled        bool
+	pullCalled        bool
+	resetCalls        []string
+	restoreCalls      []string
+	cleanCalls        []string
+	aheadBehindCalled bool
 }
 
 func newMockGit() *mockGitRunner {

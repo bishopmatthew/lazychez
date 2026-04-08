@@ -5,25 +5,27 @@ import "fmt"
 // StatusModel renders a static summary pane (branch, ahead/behind).
 // It has no cursor or scrolling — it simply displays a single line of text.
 type StatusModel struct {
-	branch  string
-	remote  string
-	ahead   int
-	behind  int
-	loaded  bool
-	focused bool
-	width   int
-	height  int
+	branch    string
+	remote    string
+	ahead     int
+	behind    int
+	hasRemote bool
+	loaded    bool
+	focused   bool
+	width     int
+	height    int
 }
 
 func NewStatusModel() StatusModel {
 	return StatusModel{}
 }
 
-func (s *StatusModel) SetAheadBehind(ahead, behind int, branch, remote string) {
+func (s *StatusModel) SetAheadBehind(ahead, behind int, branch, remote string, hasRemote bool) {
 	s.ahead = ahead
 	s.behind = behind
 	s.branch = branch
 	s.remote = remote
+	s.hasRemote = hasRemote
 	s.loaded = true
 }
 
@@ -40,13 +42,16 @@ func (s StatusModel) View() string {
 	if !s.loaded {
 		return "loading…"
 	}
-	return FormatAheadBehind(s.ahead, s.behind, s.branch, s.remote)
+	return FormatAheadBehind(s.ahead, s.behind, s.branch, s.remote, s.hasRemote)
 }
 
 // FormatAheadBehind renders the status line: "↑N ↓M branch → remote".
-// Zero counts hide the corresponding arrow. No upstream shows "branch (no remote)".
-func FormatAheadBehind(ahead, behind int, branch, remote string) string {
+// Zero counts hide the corresponding arrow. Missing remote/upstream is rendered explicitly.
+func FormatAheadBehind(ahead, behind int, branch, remote string, hasRemote bool) string {
 	if remote == "" {
+		if hasRemote {
+			return fmt.Sprintf("%s (no upstream)", branch)
+		}
 		return fmt.Sprintf("%s (no remote)", branch)
 	}
 

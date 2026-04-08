@@ -31,6 +31,8 @@ const (
 	OverlayNone OverlayMode = iota
 	OverlayHelp
 	OverlayCommit
+	OverlayConfirmApply
+	OverlayConfirmReAdd
 	OverlayConfirmApplyAll
 	OverlayConfirmGitDiscard
 	OverlayConfirmForget
@@ -42,8 +44,8 @@ const (
 const narrowBreakpoint = 85
 
 type Model struct {
-	width   int
-	height  int
+	width       int
+	height      int
 	focused     PaneID
 	prevFocused PaneID // last side-panel pane before entering diff
 
@@ -56,6 +58,8 @@ type Model struct {
 	overlay          OverlayMode
 	commitInput      textinput.Model
 	helpViewport     viewport.Model
+	confirmPath      string
+	confirmRisk      rune
 	discardPath      string
 	discardUntracked bool
 	forgetPath       string
@@ -195,7 +199,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatus(fmt.Sprintf("Git error: %v", msg.Err), true)
 			return m, clearStatusAfter()
 		}
-		m.statusPane.SetAheadBehind(msg.Ahead, msg.Behind, msg.Branch, msg.Remote)
+		m.statusPane.SetAheadBehind(msg.Ahead, msg.Behind, msg.Branch, msg.Remote, msg.HasRemote)
 		return m, nil
 
 	case AddResultMsg:
@@ -313,7 +317,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatus(fmt.Sprintf("Discard failed: %v", msg.Err), true)
 			return m, clearStatusAfter()
 		}
-		m.setStatus(fmt.Sprintf("Discarded %s", msg.Path), false)
+		if msg.Deleted {
+			m.setStatus(fmt.Sprintf("Deleted untracked %s", msg.Path), false)
+		} else {
+			m.setStatus(fmt.Sprintf("Restored %s to HEAD", msg.Path), false)
+		}
 		return m, tea.Batch(clearStatusAfter(), m.refreshAll())
 
 	case EditorFinishedMsg:
@@ -365,6 +373,32 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case OverlayCommit:
 		return m.handleCommitKey(msg)
+
+	case OverlayConfirmApply:
+		switch msg.String() {
+		case "y":
+			path := m.confirmPath
+			m.overlay = OverlayNone
+			m.clearRiskConfirmation()
+			return m, applyFile(m.chezmoi, path)
+		case "n", "esc":
+			m.overlay = OverlayNone
+			m.clearRiskConfirmation()
+		}
+		return m, nil
+
+	case OverlayConfirmReAdd:
+		switch msg.String() {
+		case "y":
+			path := m.confirmPath
+			m.overlay = OverlayNone
+			m.clearRiskConfirmation()
+			return m, addFile(m.chezmoi, path)
+		case "n", "esc":
+			m.overlay = OverlayNone
+			m.clearRiskConfirmation()
+		}
+		return m, nil
 
 	case OverlayConfirmApplyAll:
 		switch msg.String() {
@@ -523,14 +557,32 @@ func (m Model) handleFileListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+u":
 		m.fileList.HalfPageUp()
 	case "s":
-		path := m.fileList.SelectedPath()
-		if path != "" {
-			return m, addFile(m.chezmoi, path)
+		item := m.fileList.SelectedItem()
+		if item != nil {
+			switch item.AddCol {
+			case ' ':
+				m.setStatus(fmt.Sprintf("Nothing to re-add for %s", item.Path), false)
+				return m, clearStatusAfter()
+			case 'M', 'D':
+				m.queueRiskConfirmation(OverlayConfirmReAdd, item.Path, item.AddCol)
+				return m, nil
+			default:
+				return m, addFile(m.chezmoi, item.Path)
+			}
 		}
 	case "a":
-		path := m.fileList.SelectedPath()
-		if path != "" {
-			return m, applyFile(m.chezmoi, path)
+		item := m.fileList.SelectedItem()
+		if item != nil {
+			switch item.ApplyCol {
+			case ' ':
+				m.setStatus(fmt.Sprintf("Nothing to apply for %s", item.Path), false)
+				return m, clearStatusAfter()
+			case 'M', 'D':
+				m.queueRiskConfirmation(OverlayConfirmApply, item.Path, item.ApplyCol)
+				return m, nil
+			default:
+				return m, applyFile(m.chezmoi, item.Path)
+			}
 		}
 	case "A":
 		m.overlay = OverlayConfirmApplyAll
@@ -790,6 +842,17 @@ func (m *Model) setFocus(pane PaneID) {
 		m.prevFocused = m.focused
 	}
 	m.focused = pane
+}
+
+func (m *Model) queueRiskConfirmation(overlay OverlayMode, path string, risk rune) {
+	m.overlay = overlay
+	m.confirmPath = path
+	m.confirmRisk = risk
+}
+
+func (m *Model) clearRiskConfirmation() {
+	m.confirmPath = ""
+	m.confirmRisk = 0
 }
 
 // detailPaneContext returns the left-side pane that determines what pane 0 shows.

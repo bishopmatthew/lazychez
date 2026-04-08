@@ -260,6 +260,15 @@ func TestUpdate_PushResultMsg(t *testing.T) {
 			t.Errorf("statusMsg should mention chezmoi init, got %q", m.statusMsg)
 		}
 	})
+
+	t.Run("no upstream error", func(t *testing.T) {
+		m, _, _ := newTestModel()
+		result, _ := m.Update(PushResultMsg{Err: git.ErrNoUpstream})
+		m = result.(Model)
+		if !strings.Contains(m.statusMsg, "no upstream configured") {
+			t.Errorf("statusMsg should mention no upstream, got %q", m.statusMsg)
+		}
+	})
 }
 
 func TestUpdate_PullResultMsg(t *testing.T) {
@@ -296,6 +305,15 @@ func TestUpdate_PullResultMsg(t *testing.T) {
 			t.Errorf("statusMsg should mention chezmoi init, got %q", m.statusMsg)
 		}
 	})
+
+	t.Run("no upstream error", func(t *testing.T) {
+		m, _, _ := newTestModel()
+		result, _ := m.Update(PullResultMsg{Err: git.ErrNoUpstream})
+		m = result.(Model)
+		if !strings.Contains(m.statusMsg, "no upstream configured") {
+			t.Errorf("statusMsg should mention no upstream, got %q", m.statusMsg)
+		}
+	})
 }
 
 func TestUpdate_GitDiscardResultMsg(t *testing.T) {
@@ -303,11 +321,20 @@ func TestUpdate_GitDiscardResultMsg(t *testing.T) {
 		m, _, _ := newTestModel()
 		result, cmd := m.Update(GitDiscardResultMsg{Path: "file.txt"})
 		m = result.(Model)
-		if !strings.Contains(m.statusMsg, "Discarded") {
+		if !strings.Contains(m.statusMsg, "Restored") {
 			t.Errorf("statusMsg = %q", m.statusMsg)
 		}
 		if cmd == nil {
 			t.Error("cmd should not be nil")
+		}
+	})
+
+	t.Run("untracked delete success", func(t *testing.T) {
+		m, _, _ := newTestModel()
+		result, _ := m.Update(GitDiscardResultMsg{Path: "file.txt", Deleted: true})
+		m = result.(Model)
+		if !strings.Contains(m.statusMsg, "Deleted untracked") {
+			t.Errorf("statusMsg = %q", m.statusMsg)
 		}
 	})
 
@@ -702,6 +729,85 @@ func TestHandleKey_OverlayConfirmApplyAll(t *testing.T) {
 	})
 }
 
+func TestHandleKey_OverlayConfirmApply(t *testing.T) {
+	setup := func() Model {
+		m, _, _ := newTestModel()
+		m.overlay = OverlayConfirmApply
+		m.confirmPath = ".zshrc"
+		m.confirmRisk = 'M'
+		return m
+	}
+
+	t.Run("y applies", func(t *testing.T) {
+		m := setup()
+		m, cmd := sendKey(m, "y")
+		if m.overlay != OverlayNone {
+			t.Errorf("overlay = %d, want OverlayNone", m.overlay)
+		}
+		if m.confirmPath != "" {
+			t.Errorf("confirmPath = %q, want empty", m.confirmPath)
+		}
+		if cmd == nil {
+			t.Fatal("cmd should not be nil")
+		}
+		msg := cmd()
+		if result, ok := msg.(ApplyResultMsg); !ok {
+			t.Errorf("cmd() returned %T, want ApplyResultMsg", msg)
+		} else if result.Path != ".zshrc" {
+			t.Errorf("result.Path = %q, want .zshrc", result.Path)
+		}
+	})
+
+	t.Run("n cancels", func(t *testing.T) {
+		m := setup()
+		m, _ = sendKey(m, "n")
+		if m.overlay != OverlayNone {
+			t.Errorf("overlay = %d, want OverlayNone", m.overlay)
+		}
+		if m.confirmPath != "" {
+			t.Errorf("confirmPath = %q, want empty", m.confirmPath)
+		}
+	})
+}
+
+func TestHandleKey_OverlayConfirmReAdd(t *testing.T) {
+	setup := func() Model {
+		m, _, _ := newTestModel()
+		m.overlay = OverlayConfirmReAdd
+		m.confirmPath = ".zshrc"
+		m.confirmRisk = 'M'
+		return m
+	}
+
+	t.Run("y re-adds", func(t *testing.T) {
+		m := setup()
+		m, cmd := sendKey(m, "y")
+		if m.overlay != OverlayNone {
+			t.Errorf("overlay = %d, want OverlayNone", m.overlay)
+		}
+		if cmd == nil {
+			t.Fatal("cmd should not be nil")
+		}
+		msg := cmd()
+		if result, ok := msg.(AddResultMsg); !ok {
+			t.Errorf("cmd() returned %T, want AddResultMsg", msg)
+		} else if result.Path != ".zshrc" {
+			t.Errorf("result.Path = %q, want .zshrc", result.Path)
+		}
+	})
+
+	t.Run("esc cancels", func(t *testing.T) {
+		m := setup()
+		m, _ = sendSpecialKey(m, tea.KeyEscape)
+		if m.overlay != OverlayNone {
+			t.Errorf("overlay = %d, want OverlayNone", m.overlay)
+		}
+		if m.confirmPath != "" {
+			t.Errorf("confirmPath = %q, want empty", m.confirmPath)
+		}
+	})
+}
+
 func TestHandleKey_OverlayConfirmGitDiscard(t *testing.T) {
 	t.Run("y with tracked file restores", func(t *testing.T) {
 		m, _, _ := newTestModel()
@@ -720,6 +826,8 @@ func TestHandleKey_OverlayConfirmGitDiscard(t *testing.T) {
 			t.Errorf("cmd() returned %T, want GitDiscardResultMsg", msg)
 		} else if result.Path != "file.txt" {
 			t.Errorf("result.Path = %q, want file.txt", result.Path)
+		} else if result.Deleted {
+			t.Error("tracked discard should restore, not delete")
 		}
 	})
 
@@ -737,6 +845,8 @@ func TestHandleKey_OverlayConfirmGitDiscard(t *testing.T) {
 			t.Errorf("cmd() returned %T, want GitDiscardResultMsg", msg)
 		} else if result.Path != "new_file.txt" {
 			t.Errorf("result.Path = %q, want new_file.txt", result.Path)
+		} else if !result.Deleted {
+			t.Error("untracked discard should delete")
 		}
 	})
 
@@ -1130,19 +1240,23 @@ func TestHandleFileListKey(t *testing.T) {
 
 	t.Run("s triggers re-add on selected file", func(t *testing.T) {
 		m, _ := setupWithFiles()
+		m.fileList.MoveDown() // select the file with AddCol=M
 		path := m.fileList.SelectedPath()
 		if path == "" {
 			t.Fatal("no file selected")
 		}
-		_, cmd := sendKey(m, "s")
-		if cmd == nil {
-			t.Fatal("cmd should not be nil")
+		m, cmd := sendKey(m, "s")
+		if cmd != nil {
+			t.Fatal("cmd should be nil while confirmation overlay is open")
 		}
-		msg := cmd()
-		if result, ok := msg.(AddResultMsg); !ok {
-			t.Errorf("cmd() returned %T, want AddResultMsg", msg)
-		} else if result.Path != path {
-			t.Errorf("result.Path = %q, want %q", result.Path, path)
+		if m.overlay != OverlayConfirmReAdd {
+			t.Fatalf("overlay = %d, want OverlayConfirmReAdd", m.overlay)
+		}
+		if m.confirmPath != path {
+			t.Fatalf("confirmPath = %q, want %q", m.confirmPath, path)
+		}
+		if m.confirmRisk != 'M' {
+			t.Fatalf("confirmRisk = %q, want M", string(m.confirmRisk))
 		}
 	})
 
@@ -1157,15 +1271,50 @@ func TestHandleFileListKey(t *testing.T) {
 	t.Run("a triggers apply on selected file", func(t *testing.T) {
 		m, _ := setupWithFiles()
 		path := m.fileList.SelectedPath()
+		m, cmd := sendKey(m, "a")
+		if cmd != nil {
+			t.Fatal("cmd should be nil while confirmation overlay is open")
+		}
+		if m.overlay != OverlayConfirmApply {
+			t.Fatalf("overlay = %d, want OverlayConfirmApply", m.overlay)
+		}
+		if m.confirmPath != path {
+			t.Fatalf("confirmPath = %q, want %q", m.confirmPath, path)
+		}
+		if m.confirmRisk != 'M' {
+			t.Fatalf("confirmRisk = %q, want M", string(m.confirmRisk))
+		}
+	})
+
+	t.Run("a with apply status A applies immediately", func(t *testing.T) {
+		m, _, _ := newTestModel()
+		m.managedFiles = []chezmoi.ManagedFile{{Path: ".new", SourceRelPath: "dot_new"}}
+		m.statusData = []chezmoi.StatusEntry{{AddCol: ' ', ApplyCol: 'A', Path: ".new"}}
+		m.rebuildFileList()
+		m.updateDimensions()
 		_, cmd := sendKey(m, "a")
 		if cmd == nil {
 			t.Fatal("cmd should not be nil")
 		}
 		msg := cmd()
-		if result, ok := msg.(ApplyResultMsg); !ok {
+		if _, ok := msg.(ApplyResultMsg); !ok {
 			t.Errorf("cmd() returned %T, want ApplyResultMsg", msg)
-		} else if result.Path != path {
-			t.Errorf("result.Path = %q, want %q", result.Path, path)
+		}
+	})
+
+	t.Run("s with add status A re-adds immediately", func(t *testing.T) {
+		m, _, _ := newTestModel()
+		m.managedFiles = []chezmoi.ManagedFile{{Path: ".new", SourceRelPath: "dot_new"}}
+		m.statusData = []chezmoi.StatusEntry{{AddCol: 'A', ApplyCol: ' ', Path: ".new"}}
+		m.rebuildFileList()
+		m.updateDimensions()
+		_, cmd := sendKey(m, "s")
+		if cmd == nil {
+			t.Fatal("cmd should not be nil")
+		}
+		msg := cmd()
+		if _, ok := msg.(AddResultMsg); !ok {
+			t.Errorf("cmd() returned %T, want AddResultMsg", msg)
 		}
 	})
 
@@ -1228,6 +1377,36 @@ func TestHandleFileListKey(t *testing.T) {
 		_, cmd := sendKey(m, "s")
 		if cmd != nil {
 			t.Error("cmd should be nil when no file selected")
+		}
+	})
+
+	t.Run("a with no pending changes shows no-op status", func(t *testing.T) {
+		m, _, _ := newTestModel()
+		m.managedFiles = []chezmoi.ManagedFile{{Path: ".zshrc", SourceRelPath: "dot_zshrc"}}
+		m.rebuildFileList()
+		m.updateDimensions()
+		result, cmd := sendKey(m, "a")
+		m = result
+		if !strings.Contains(m.statusMsg, "Nothing to apply") {
+			t.Fatalf("statusMsg = %q", m.statusMsg)
+		}
+		if cmd == nil {
+			t.Fatal("cmd should clear the status message")
+		}
+	})
+
+	t.Run("s with no pending changes shows no-op status", func(t *testing.T) {
+		m, _, _ := newTestModel()
+		m.managedFiles = []chezmoi.ManagedFile{{Path: ".zshrc", SourceRelPath: "dot_zshrc"}}
+		m.rebuildFileList()
+		m.updateDimensions()
+		result, cmd := sendKey(m, "s")
+		m = result
+		if !strings.Contains(m.statusMsg, "Nothing to re-add") {
+			t.Fatalf("statusMsg = %q", m.statusMsg)
+		}
+		if cmd == nil {
+			t.Fatal("cmd should clear the status message")
 		}
 	})
 }
@@ -1389,7 +1568,7 @@ func TestViewDoesNotPanic(t *testing.T) {
 
 	t.Run("with overlays", func(t *testing.T) {
 		m, _, _ := newTestModel()
-		overlays := []OverlayMode{OverlayHelp, OverlayCommit, OverlayConfirmApplyAll, OverlayConfirmGitDiscard, OverlayConfirmForget}
+		overlays := []OverlayMode{OverlayHelp, OverlayCommit, OverlayConfirmApply, OverlayConfirmReAdd, OverlayConfirmApplyAll, OverlayConfirmGitDiscard, OverlayConfirmForget}
 		for _, o := range overlays {
 			m.overlay = o
 			_ = m.View() // Should not panic
@@ -1420,22 +1599,24 @@ func TestViewDoesNotPanic(t *testing.T) {
 
 func TestFormatAheadBehind(t *testing.T) {
 	tests := []struct {
-		name   string
-		ahead  int
-		behind int
-		branch string
-		remote string
-		want   string
+		name      string
+		ahead     int
+		behind    int
+		branch    string
+		remote    string
+		hasRemote bool
+		want      string
 	}{
-		{"ahead only", 2, 0, "main", "origin/main", "↑2 main → origin/main"},
-		{"behind only", 0, 3, "main", "origin/main", "↓3 main → origin/main"},
-		{"both", 2, 3, "main", "origin/main", "↑2 ↓3 main → origin/main"},
-		{"zero zero", 0, 0, "main", "origin/main", "main → origin/main"},
-		{"no upstream", 0, 0, "main", "", "main (no remote)"},
+		{"ahead only", 2, 0, "main", "origin/main", true, "↑2 main → origin/main"},
+		{"behind only", 0, 3, "main", "origin/main", true, "↓3 main → origin/main"},
+		{"both", 2, 3, "main", "origin/main", true, "↑2 ↓3 main → origin/main"},
+		{"zero zero", 0, 0, "main", "origin/main", true, "main → origin/main"},
+		{"no upstream", 0, 0, "main", "", true, "main (no upstream)"},
+		{"no remote", 0, 0, "main", "", false, "main (no remote)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := FormatAheadBehind(tt.ahead, tt.behind, tt.branch, tt.remote)
+			got := FormatAheadBehind(tt.ahead, tt.behind, tt.branch, tt.remote, tt.hasRemote)
 			if got != tt.want {
 				t.Errorf("FormatAheadBehind() = %q, want %q", got, tt.want)
 			}
@@ -1446,7 +1627,7 @@ func TestFormatAheadBehind(t *testing.T) {
 func TestUpdate_AheadBehindMsg(t *testing.T) {
 	t.Run("success updates status pane", func(t *testing.T) {
 		m, _, _ := newTestModel()
-		msg := AheadBehindMsg{Ahead: 2, Behind: 3, Branch: "main", Remote: "origin/main"}
+		msg := AheadBehindMsg{Ahead: 2, Behind: 3, Branch: "main", Remote: "origin/main", HasRemote: true}
 		result, cmd := m.Update(msg)
 		m = result.(Model)
 		if cmd != nil {
@@ -1480,9 +1661,20 @@ func TestUpdate_AheadBehindMsg(t *testing.T) {
 		}
 	})
 
-	t.Run("no upstream shows no remote", func(t *testing.T) {
+	t.Run("no upstream shows no upstream", func(t *testing.T) {
 		m, _, _ := newTestModel()
-		msg := AheadBehindMsg{Branch: "main", Remote: ""}
+		msg := AheadBehindMsg{Branch: "main", Remote: "", HasRemote: true}
+		result, _ := m.Update(msg)
+		m = result.(Model)
+		view := m.statusPane.View()
+		if !strings.Contains(view, "(no upstream)") {
+			t.Errorf("view = %q, want to contain '(no upstream)'", view)
+		}
+	})
+
+	t.Run("no remote shows no remote", func(t *testing.T) {
+		m, _, _ := newTestModel()
+		msg := AheadBehindMsg{Branch: "main", Remote: "", HasRemote: false}
 		result, _ := m.Update(msg)
 		m = result.(Model)
 		view := m.statusPane.View()
@@ -1493,7 +1685,7 @@ func TestUpdate_AheadBehindMsg(t *testing.T) {
 
 	t.Run("zero zero with remote shows clean line", func(t *testing.T) {
 		m, _, _ := newTestModel()
-		msg := AheadBehindMsg{Ahead: 0, Behind: 0, Branch: "main", Remote: "origin/main"}
+		msg := AheadBehindMsg{Ahead: 0, Behind: 0, Branch: "main", Remote: "origin/main", HasRemote: true}
 		result, _ := m.Update(msg)
 		m = result.(Model)
 		view := m.statusPane.View()

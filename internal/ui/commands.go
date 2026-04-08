@@ -199,7 +199,7 @@ func restoreFile(r git.Runner, path string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		err := r.Restore(ctx, path)
-		return GitDiscardResultMsg{Path: path, Err: err}
+		return GitDiscardResultMsg{Path: path, Deleted: false, Err: err}
 	}
 }
 
@@ -208,10 +208,9 @@ func cleanFile(r git.Runner, path string) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		err := r.Clean(ctx, path)
-		return GitDiscardResultMsg{Path: path, Err: err}
+		return GitDiscardResultMsg{Path: path, Deleted: true, Err: err}
 	}
 }
-
 
 func fetchAheadBehind(r git.Runner) tea.Cmd {
 	return func() tea.Msg {
@@ -219,11 +218,12 @@ func fetchAheadBehind(r git.Runner) tea.Cmd {
 		defer cancel()
 		info, err := r.AheadBehind(ctx)
 		return AheadBehindMsg{
-			Ahead:  info.Ahead,
-			Behind: info.Behind,
-			Branch: info.Branch,
-			Remote: info.Remote,
-			Err:    err,
+			Ahead:     info.Ahead,
+			Behind:    info.Behind,
+			Branch:    info.Branch,
+			Remote:    info.Remote,
+			HasRemote: info.HasRemote,
+			Err:       err,
 		}
 	}
 }
