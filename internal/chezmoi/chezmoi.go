@@ -128,7 +128,7 @@ func (c *CLI) Cat(ctx context.Context, path string) (string, error) {
 
 func (c *CLI) Diff(ctx context.Context, path string) (string, error) {
 	fullPath := filepath.Join(c.homeDir, path)
-	out, err := c.run(ctx, "diff", "--", fullPath)
+	out, err := c.run(ctx, "diff", "--no-pager", "--color=false", "--", fullPath)
 	if err != nil {
 		// chezmoi diff exits non-zero when there are differences
 		if out != "" {
