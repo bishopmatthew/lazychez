@@ -19,6 +19,14 @@ const (
 	FilterLocked
 )
 
+type SearchMode int
+
+const (
+	SearchInactive SearchMode = iota
+	SearchTyping
+	SearchActive
+)
+
 type FileItem struct {
 	Path          string
 	SourceRelPath string
@@ -68,6 +76,14 @@ type FileListModel struct {
 	filterMode  FilterMode
 	filterInput textinput.Model
 	savedCursor int // cursor position before filter was activated
+
+	// Search state (vim-like incremental search)
+	searchMode        SearchMode
+	searchInput       textinput.Model
+	searchQuery       string // confirmed query for n/N
+	searchMatches     []int  // indices into m.files of matching items
+	searchIdx         int    // current position in searchMatches
+	savedSearchCursor int    // cursor position before search started
 }
 
 func NewFileListModel() FileListModel {
@@ -81,6 +97,9 @@ func (m *FileListModel) SetFiles(files []FileItem) {
 	if m.filterMode != FilterInactive {
 		// Preserve active filter — reapply it to the new data
 		m.applyFilter()
+		if m.searchMode != SearchInactive {
+			m.computeSearchMatches()
+		}
 		return
 	}
 	m.rebuildDisplayList()
@@ -90,6 +109,9 @@ func (m *FileListModel) SetFiles(files []FileItem) {
 	}
 	m.snapCursorToFile()
 	m.clampOffset()
+	if m.searchMode != SearchInactive {
+		m.computeSearchMatches()
+	}
 }
 
 func (m *FileListModel) rebuildDisplayList() {
@@ -355,20 +377,21 @@ func (m FileListModel) View() string {
 		}
 
 		selected := i == m.cursor && (m.focused || m.showCursor) && m.filterMode != FilterTyping
+		isMatch := m.isSearchMatch(i)
 		indent := strings.Repeat("   ", f.TreeDepth)
 
 		if f.IsDir {
-			lines = append(lines, m.renderDirLine(f, indent, selected))
+			lines = append(lines, m.renderDirLine(f, indent, selected, isMatch))
 			continue
 		}
 
-		lines = append(lines, m.renderFileLine(f, indent, selected))
+		lines = append(lines, m.renderFileLine(f, indent, selected, isMatch))
 	}
 
 	return strings.Join(lines, "\n")
 }
 
-func (m FileListModel) renderDirLine(f FileItem, indent string, selected bool) string {
+func (m FileListModel) renderDirLine(f FileItem, indent string, selected bool, isMatch bool) string {
 	arrow := "▼"
 	if f.DirCollapsed {
 		arrow = "▶"
@@ -377,6 +400,8 @@ func (m FileListModel) renderDirLine(f FileItem, indent string, selected bool) s
 	dirStyle := lipgloss.NewStyle().Foreground(DirColor)
 	if selected {
 		dirStyle = dirStyle.Background(SelectedBg).Bold(true)
+	} else if isMatch {
+		dirStyle = dirStyle.Background(SearchMatchBg)
 	}
 
 	prefix := indent + dirStyle.Render(arrow)
@@ -389,7 +414,7 @@ func (m FileListModel) renderDirLine(f FileItem, indent string, selected bool) s
 	return line
 }
 
-func (m FileListModel) renderFileLine(f FileItem, indent string, selected bool) string {
+func (m FileListModel) renderFileLine(f FileItem, indent string, selected bool, isMatch bool) string {
 	// Use TreeName (filename segment) for tree view, fall back to full Path
 	displayName := f.TreeName
 	if displayName == "" {
@@ -422,6 +447,9 @@ func (m FileListModel) renderFileLine(f FileItem, indent string, selected bool) 
 		if selected {
 			return SelectedItem.Render(indent) + code + SelectedItem.Render(" "+displayName) + tmplSuffix + SelectedItem.Render(padding)
 		}
+		if isMatch {
+			return SearchHighlight.Render(indent) + code + SearchHighlight.Render(" "+displayName) + tmplSuffix + SearchHighlight.Render(padding)
+		}
 		return indent + code + " " + displayName + tmplSuffix + padding
 	}
 
@@ -434,6 +462,9 @@ func (m FileListModel) renderFileLine(f FileItem, indent string, selected bool) 
 
 	if selected {
 		return SelectedItem.Render(indent+displayName) + tmplSuffix + SelectedItem.Render(padding)
+	}
+	if isMatch {
+		return SearchHighlight.Render(indent+displayName) + tmplSuffix + SearchHighlight.Render(padding)
 	}
 	return indent + displayName + tmplSuffix + padding
 }
@@ -645,4 +676,159 @@ func insertDivider(files []FileItem) []FileItem {
 // renderDividerLine renders a simple horizontal divider line.
 func renderDividerLine(width int) string {
 	return lipgloss.NewStyle().Foreground(MutedColor).Render(strings.Repeat("─", width))
+}
+
+// --- Search methods (vim-like incremental search) ---
+
+func (m FileListModel) IsSearching() bool {
+	return m.searchMode == SearchTyping
+}
+
+func (m FileListModel) IsSearchActive() bool {
+	return m.searchMode == SearchActive
+}
+
+func (m FileListModel) SearchQuery() string {
+	return m.searchQuery
+}
+
+func (m FileListModel) SearchMatchCount() int {
+	return len(m.searchMatches)
+}
+
+func (m *FileListModel) StartSearch() {
+	m.searchMode = SearchTyping
+	m.savedSearchCursor = m.cursor
+	m.searchInput = textinput.New()
+	m.searchInput.Prompt = "/ "
+	m.searchInput.PromptStyle = HelpKey
+	m.searchInput.Focus()
+	m.searchMatches = nil
+	m.searchQuery = ""
+}
+
+func (m *FileListModel) CancelSearch() {
+	m.searchMode = SearchInactive
+	m.searchInput.Blur()
+	m.searchMatches = nil
+	m.searchQuery = ""
+	m.cursor = m.savedSearchCursor
+	if m.cursor >= len(m.files) {
+		m.cursor = max(0, len(m.files)-1)
+	}
+	m.clampOffset()
+}
+
+func (m *FileListModel) ConfirmSearch() {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	m.searchMode = SearchActive
+	m.searchQuery = m.searchInput.Value()
+	m.searchInput.Blur()
+}
+
+func (m *FileListModel) ClearSearch() {
+	m.searchMode = SearchInactive
+	m.searchMatches = nil
+	m.searchQuery = ""
+	// Cursor stays where it is (vim behavior)
+}
+
+func (m *FileListModel) computeSearchMatches() {
+	query := strings.ToLower(m.searchInput.Value())
+	if query == "" {
+		m.searchMatches = nil
+		return
+	}
+	m.searchMatches = m.searchMatches[:0]
+	for i, f := range m.files {
+		if f.IsHeading || f.IsDir {
+			continue
+		}
+		name := f.TreeName
+		if name == "" {
+			name = f.Path
+		}
+		if strings.Contains(strings.ToLower(name), query) {
+			m.searchMatches = append(m.searchMatches, i)
+		}
+	}
+
+	// Style input red when no matches
+	if len(m.searchMatches) == 0 {
+		m.searchInput.TextStyle = lipgloss.NewStyle().Foreground(ErrorColor)
+	} else {
+		m.searchInput.TextStyle = lipgloss.NewStyle()
+	}
+}
+
+func (m *FileListModel) jumpToNextSearchMatch() bool {
+	if len(m.searchMatches) == 0 {
+		return false
+	}
+	// Find first match at or after current cursor
+	for i, idx := range m.searchMatches {
+		if idx >= m.cursor {
+			m.searchIdx = i
+			m.cursor = idx
+			m.clampOffset()
+			return true
+		}
+	}
+	// Wrap to first match
+	m.searchIdx = 0
+	m.cursor = m.searchMatches[0]
+	m.clampOffset()
+	return true
+}
+
+func (m *FileListModel) NextSearchMatch() {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	// Find next match strictly after current cursor
+	for i, idx := range m.searchMatches {
+		if idx > m.cursor {
+			m.searchIdx = i
+			m.cursor = idx
+			m.clampOffset()
+			return
+		}
+	}
+	// Wrap to first
+	m.searchIdx = 0
+	m.cursor = m.searchMatches[0]
+	m.clampOffset()
+}
+
+func (m *FileListModel) PrevSearchMatch() {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	// Find previous match strictly before current cursor
+	for i := len(m.searchMatches) - 1; i >= 0; i-- {
+		if m.searchMatches[i] < m.cursor {
+			m.searchIdx = i
+			m.cursor = m.searchMatches[i]
+			m.clampOffset()
+			return
+		}
+	}
+	// Wrap to last
+	m.searchIdx = len(m.searchMatches) - 1
+	m.cursor = m.searchMatches[m.searchIdx]
+	m.clampOffset()
+}
+
+func (m FileListModel) isSearchMatch(index int) bool {
+	if m.searchMode == SearchInactive {
+		return false
+	}
+	for _, idx := range m.searchMatches {
+		if idx == index {
+			return true
+		}
+	}
+	return false
 }

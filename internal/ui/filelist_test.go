@@ -783,3 +783,336 @@ func TestFilter_CursorPosition(t *testing.T) {
 		t.Errorf("after MoveDown: total = %d, want 2", total)
 	}
 }
+
+// --- Search tests ---
+
+// makeSearchModel creates a FileListModel pre-loaded with files for search tests.
+// Uses a flat list (no tree) for predictable index positions.
+func makeSearchModel() FileListModel {
+	m := NewFileListModel()
+	m.SetDimensions(80, 20)
+	m.SetFiles([]FileItem{
+		{Path: ".bashrc", TreeName: ".bashrc", AddCol: ' ', ApplyCol: 'M'},
+		{Path: ".zshrc", TreeName: ".zshrc", AddCol: 'M', ApplyCol: ' '},
+		{Path: ".vimrc", TreeName: ".vimrc", AddCol: ' ', ApplyCol: ' '},
+		{Path: ".gitconfig", TreeName: ".gitconfig", AddCol: ' ', ApplyCol: ' '},
+	})
+	return m
+}
+
+func TestSearch_IncrementalJump(t *testing.T) {
+	m := makeSearchModel()
+	totalBefore := len(m.files)
+
+	m.StartSearch()
+	m.searchInput.SetValue("vim")
+	m.computeSearchMatches()
+	m.jumpToNextSearchMatch()
+
+	// All files should still be visible
+	if len(m.files) != totalBefore {
+		t.Errorf("len(files) = %d, want %d (all files visible)", len(m.files), totalBefore)
+	}
+
+	// Cursor should have jumped to .vimrc
+	if m.SelectedPath() != ".vimrc" {
+		t.Errorf("SelectedPath() = %q, want .vimrc", m.SelectedPath())
+	}
+
+	if len(m.searchMatches) != 1 {
+		t.Errorf("searchMatches = %d, want 1", len(m.searchMatches))
+	}
+}
+
+func TestSearch_CaseInsensitive(t *testing.T) {
+	m := makeSearchModel()
+	m.StartSearch()
+	m.searchInput.SetValue("ZSH")
+	m.computeSearchMatches()
+
+	if len(m.searchMatches) != 1 {
+		t.Fatalf("searchMatches = %d, want 1", len(m.searchMatches))
+	}
+
+	m.jumpToNextSearchMatch()
+	if m.SelectedPath() != ".zshrc" {
+		t.Errorf("SelectedPath() = %q, want .zshrc", m.SelectedPath())
+	}
+}
+
+func TestSearch_NoMatches(t *testing.T) {
+	m := makeSearchModel()
+	m.SetCursor(2) // start on a specific file
+	savedPos := m.cursor
+
+	m.StartSearch()
+	m.searchInput.SetValue("nonexistent")
+	m.computeSearchMatches()
+
+	if len(m.searchMatches) != 0 {
+		t.Errorf("searchMatches = %d, want 0", len(m.searchMatches))
+	}
+
+	// jumpToNextSearchMatch should return false and not move cursor
+	moved := m.jumpToNextSearchMatch()
+	if moved {
+		t.Error("jumpToNextSearchMatch() = true, want false")
+	}
+
+	// Cancel should restore original position
+	m.CancelSearch()
+	if m.cursor != savedPos {
+		t.Errorf("cursor = %d, want %d (restored)", m.cursor, savedPos)
+	}
+}
+
+func TestSearch_NextPrevMatch(t *testing.T) {
+	m := makeSearchModel()
+	m.StartSearch()
+	m.searchInput.SetValue("rc") // matches .bashrc, .zshrc, .vimrc
+	m.computeSearchMatches()
+
+	if len(m.searchMatches) < 3 {
+		t.Fatalf("searchMatches = %d, want >= 3", len(m.searchMatches))
+	}
+
+	m.ConfirmSearch()
+	if m.searchMode != SearchActive {
+		t.Fatalf("searchMode = %d, want SearchActive", m.searchMode)
+	}
+
+	// Start at first match
+	m.cursor = m.searchMatches[0]
+	first := m.cursor
+
+	// Next should go to second match
+	m.NextSearchMatch()
+	second := m.cursor
+	if second <= first {
+		t.Errorf("NextSearchMatch: cursor %d should be > %d", second, first)
+	}
+
+	// Prev should go back to first
+	m.PrevSearchMatch()
+	if m.cursor != first {
+		t.Errorf("PrevSearchMatch: cursor = %d, want %d", m.cursor, first)
+	}
+}
+
+func TestSearch_WrapAround(t *testing.T) {
+	m := makeSearchModel()
+	m.StartSearch()
+	m.searchInput.SetValue("rc") // matches .bashrc, .zshrc, .vimrc
+	m.computeSearchMatches()
+	m.ConfirmSearch()
+
+	if len(m.searchMatches) < 2 {
+		t.Fatalf("need >= 2 matches, got %d", len(m.searchMatches))
+	}
+
+	lastMatch := m.searchMatches[len(m.searchMatches)-1]
+	firstMatch := m.searchMatches[0]
+
+	// Go to last match, then next should wrap to first
+	m.cursor = lastMatch
+	m.NextSearchMatch()
+	if m.cursor != firstMatch {
+		t.Errorf("NextSearchMatch wrap: cursor = %d, want %d", m.cursor, firstMatch)
+	}
+
+	// Go to first match, then prev should wrap to last
+	m.cursor = firstMatch
+	m.PrevSearchMatch()
+	if m.cursor != lastMatch {
+		t.Errorf("PrevSearchMatch wrap: cursor = %d, want %d", m.cursor, lastMatch)
+	}
+}
+
+func TestSearch_EscDuringTyping(t *testing.T) {
+	m := makeSearchModel()
+	// Move to last file so searching for "bash" jumps away
+	m.GoToBottom()
+	savedPos := m.cursor
+
+	m.StartSearch()
+	if m.searchMode != SearchTyping {
+		t.Fatalf("searchMode = %d, want SearchTyping", m.searchMode)
+	}
+
+	m.searchInput.SetValue("gitconfig")
+	m.computeSearchMatches()
+	if len(m.searchMatches) == 0 {
+		t.Fatal("expected at least 1 match for 'gitconfig'")
+	}
+	m.jumpToNextSearchMatch()
+
+	// Cancel restores cursor
+	m.CancelSearch()
+	if m.searchMode != SearchInactive {
+		t.Errorf("searchMode = %d, want SearchInactive", m.searchMode)
+	}
+	if m.cursor != savedPos {
+		t.Errorf("cursor = %d, want %d (restored)", m.cursor, savedPos)
+	}
+}
+
+func TestSearch_EscDuringActive(t *testing.T) {
+	m := makeSearchModel()
+	m.StartSearch()
+	m.searchInput.SetValue("vim")
+	m.computeSearchMatches()
+	m.jumpToNextSearchMatch()
+	m.ConfirmSearch()
+
+	cursorAfterConfirm := m.cursor
+
+	// Clear search — cursor should stay where it is (vim behavior)
+	m.ClearSearch()
+	if m.searchMode != SearchInactive {
+		t.Errorf("searchMode = %d, want SearchInactive", m.searchMode)
+	}
+	if m.cursor != cursorAfterConfirm {
+		t.Errorf("cursor = %d, want %d (stays put)", m.cursor, cursorAfterConfirm)
+	}
+	if len(m.searchMatches) != 0 {
+		t.Errorf("searchMatches = %d, want 0 (cleared)", len(m.searchMatches))
+	}
+}
+
+func TestSearch_ModeTransitions(t *testing.T) {
+	m := makeSearchModel()
+
+	// Inactive → Typing
+	if m.searchMode != SearchInactive {
+		t.Fatalf("initial: searchMode = %d, want SearchInactive", m.searchMode)
+	}
+	m.StartSearch()
+	if m.searchMode != SearchTyping {
+		t.Fatalf("after StartSearch: searchMode = %d, want SearchTyping", m.searchMode)
+	}
+	if !m.IsSearching() {
+		t.Error("IsSearching() = false, want true")
+	}
+
+	// Typing → Active
+	m.searchInput.SetValue("rc")
+	m.computeSearchMatches()
+	m.jumpToNextSearchMatch()
+	m.ConfirmSearch()
+	if m.searchMode != SearchActive {
+		t.Fatalf("after ConfirmSearch: searchMode = %d, want SearchActive", m.searchMode)
+	}
+	if !m.IsSearchActive() {
+		t.Error("IsSearchActive() = false, want true")
+	}
+	if m.IsSearching() {
+		t.Error("IsSearching() = true during SearchActive, want false")
+	}
+
+	// Active → Inactive
+	m.ClearSearch()
+	if m.searchMode != SearchInactive {
+		t.Errorf("after ClearSearch: searchMode = %d, want SearchInactive", m.searchMode)
+	}
+
+	// Typing → Inactive (cancel)
+	m.StartSearch()
+	m.CancelSearch()
+	if m.searchMode != SearchInactive {
+		t.Errorf("after CancelSearch: searchMode = %d, want SearchInactive", m.searchMode)
+	}
+}
+
+func TestSearch_HighlightDetection(t *testing.T) {
+	m := makeSearchModel()
+	m.StartSearch()
+	m.searchInput.SetValue("bash")
+	m.computeSearchMatches()
+
+	if len(m.searchMatches) != 1 {
+		t.Fatalf("searchMatches = %d, want 1", len(m.searchMatches))
+	}
+
+	matchIdx := m.searchMatches[0]
+	if !m.isSearchMatch(matchIdx) {
+		t.Errorf("isSearchMatch(%d) = false, want true", matchIdx)
+	}
+
+	// Non-match index should return false
+	for i := range m.files {
+		if i != matchIdx && m.isSearchMatch(i) {
+			t.Errorf("isSearchMatch(%d) = true, want false (not a match)", i)
+		}
+	}
+}
+
+func TestSearch_HighlightInactiveReturns_False(t *testing.T) {
+	m := makeSearchModel()
+	// SearchInactive — isSearchMatch should always return false
+	for i := range m.files {
+		if m.isSearchMatch(i) {
+			t.Errorf("isSearchMatch(%d) = true during SearchInactive, want false", i)
+		}
+	}
+}
+
+func TestSearch_SurvivesDataRefresh(t *testing.T) {
+	m := makeSearchModel()
+	m.StartSearch()
+	m.searchInput.SetValue("zsh")
+	m.computeSearchMatches()
+
+	if len(m.searchMatches) != 1 {
+		t.Fatalf("before refresh: searchMatches = %d, want 1", len(m.searchMatches))
+	}
+
+	// Refresh with new data that still includes .zshrc
+	m.SetFiles([]FileItem{
+		{Path: ".zshrc", TreeName: ".zshrc", AddCol: 'M', ApplyCol: ' '},
+		{Path: ".newfile", TreeName: ".newfile", AddCol: 'A', ApplyCol: ' '},
+	})
+
+	if len(m.searchMatches) != 1 {
+		t.Errorf("after refresh: searchMatches = %d, want 1", len(m.searchMatches))
+	}
+}
+
+func TestSearch_WithActiveFilter(t *testing.T) {
+	m := makeFilterModel()
+
+	// Apply filter first to narrow down to "rc" files
+	m.StartFilter()
+	m.filterInput.SetValue("rc")
+	m.applyFilter()
+	filteredCount := m.FileCount()
+	if filteredCount < 3 {
+		t.Fatalf("filter FileCount() = %d, want >= 3", filteredCount)
+	}
+
+	// Now search within filtered results
+	m.StartSearch()
+	m.searchInput.SetValue("vim")
+	m.computeSearchMatches()
+
+	if len(m.searchMatches) != 1 {
+		t.Errorf("searchMatches within filter = %d, want 1", len(m.searchMatches))
+	}
+
+	// File count should still be the filtered count (search doesn't hide files)
+	if m.FileCount() != filteredCount {
+		t.Errorf("FileCount() = %d, want %d (search doesn't hide)", m.FileCount(), filteredCount)
+	}
+}
+
+func TestSearch_ConfirmWithNoMatchesStaysTyping(t *testing.T) {
+	m := makeSearchModel()
+	m.StartSearch()
+	m.searchInput.SetValue("nonexistent")
+	m.computeSearchMatches()
+
+	m.ConfirmSearch()
+	// Should stay in typing mode since there are no matches
+	if m.searchMode != SearchTyping {
+		t.Errorf("searchMode = %d, want SearchTyping (no matches to confirm)", m.searchMode)
+	}
+}

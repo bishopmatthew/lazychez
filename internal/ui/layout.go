@@ -351,6 +351,14 @@ func (m Model) renderStatusBar() string {
 		return StatusBarError.Width(m.width).Render("No matches")
 	}
 
+	// Show "No matches" when search is active with zero results
+	if m.focused == PaneFileList &&
+		m.fileList.IsSearching() &&
+		m.fileList.searchInput.Value() != "" &&
+		m.fileList.SearchMatchCount() == 0 {
+		return StatusBarError.Width(m.width).Render("No matches")
+	}
+
 	if m.statusMsg == "" {
 		return ""
 	}
@@ -367,6 +375,28 @@ func (m Model) renderFooter() string {
 		fi := m.fileList.filterInput
 		fi.Width = max(0, m.width-4)
 		return " " + fi.View()
+	}
+
+	// Search typing mode replaces the footer with a text input
+	if m.focused == PaneFileList && m.fileList.IsSearching() {
+		si := m.fileList.searchInput
+		si.Width = max(0, m.width-4)
+		return " " + si.View()
+	}
+
+	// Active search shows match count and navigation hints
+	if m.focused == PaneFileList && m.fileList.IsSearchActive() {
+		query := m.fileList.SearchQuery()
+		count := m.fileList.SearchMatchCount()
+		indicator := HelpDesc.Render(fmt.Sprintf(" Search: %d matches for ", count)) +
+			HelpKey.Render("'"+query+"'") +
+			HelpSep.Render(" | ") +
+			HelpKey.Render("n") + " " + HelpDesc.Render("next") +
+			HelpSep.Render(" | ") +
+			HelpKey.Render("N") + " " + HelpDesc.Render("prev") +
+			HelpSep.Render(" | ") +
+			HelpKey.Render("<esc>") + " " + HelpDesc.Render("clear")
+		return indicator
 	}
 
 	// Locked filter mode shows a persistent indicator
@@ -391,7 +421,7 @@ func (m Model) renderFooter() string {
 		paneHints = []string{
 			hint("s", "re-add (dest → source)"), hint("a", "apply (source → dest)"),
 			hint("t", "toggle template"), hint("+", "new"), hint("e", "edit"),
-			hint("/", "filter"),
+			hint("/", "filter"), hint("^f", "search"),
 		}
 	case PaneGitStatus:
 		paneHints = []string{
@@ -476,6 +506,12 @@ func (m Model) helpContent() string {
     /           Start filtering files
     enter       Lock filter (navigate matches)
     esc         Cancel / exit filter mode
+` + "\n" +
+		heading.Render("  Search (File List)") + `
+    ctrl+f      Search files (incremental)
+    n/N         Next/previous match
+    enter       Confirm search
+    esc         Cancel / clear search
 ` + "\n" +
 		heading.Render("  Mouse") + `
     click       Focus pane / select file

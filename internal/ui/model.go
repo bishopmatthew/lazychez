@@ -420,6 +420,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFileListFilterKey(msg)
 	}
 
+	// File list search typing mode — capture all keys before global handlers
+	if m.focused == PaneFileList && m.fileList.IsSearching() {
+		return m.handleFileListSearchKey(msg)
+	}
+
 	// Global keys
 	switch msg.String() {
 	case "q", "ctrl+c":
@@ -496,6 +501,12 @@ func (m Model) handleFileListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.fetchDiffForSelected()
 	}
 
+	// Esc clears active search
+	if m.fileList.IsSearchActive() && msg.String() == "esc" {
+		m.fileList.ClearSearch()
+		return m, nil
+	}
+
 	prevPath := m.fileList.SelectedPath()
 
 	switch msg.String() {
@@ -568,6 +579,17 @@ func (m Model) handleFileListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "/":
 		m.fileList.StartFilter()
 		return m, textinput.Blink
+	case "ctrl+f":
+		m.fileList.StartSearch()
+		return m, textinput.Blink
+	case "n":
+		if m.fileList.IsSearchActive() {
+			m.fileList.NextSearchMatch()
+		}
+	case "N":
+		if m.fileList.IsSearchActive() {
+			m.fileList.PrevSearchMatch()
+		}
 	}
 
 	if newPath := m.fileList.SelectedPath(); newPath != prevPath && newPath != "" {
@@ -702,6 +724,23 @@ func (m Model) handleFileListFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.fileList.filterInput, cmd = m.fileList.filterInput.Update(msg)
 	m.fileList.applyFilter()
+	return m, cmd
+}
+
+func (m Model) handleFileListSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.fileList.CancelSearch()
+		return m, m.fetchDiffForSelected()
+	case "enter":
+		m.fileList.ConfirmSearch()
+		return m, m.fetchDiffForSelected()
+	}
+
+	var cmd tea.Cmd
+	m.fileList.searchInput, cmd = m.fileList.searchInput.Update(msg)
+	m.fileList.computeSearchMatches()
+	m.fileList.jumpToNextSearchMatch()
 	return m, cmd
 }
 

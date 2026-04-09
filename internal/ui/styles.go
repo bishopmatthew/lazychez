@@ -26,6 +26,9 @@ var (
 	SuccessColor  = adaptiveColor("#1E7A1E", "#98E481")
 	ErrorColor    = adaptiveColor("#B42318", "#E48281")
 
+	// Search highlight
+	SearchMatchBg = adaptiveColor("#FFF3CD", "#3D3200")
+
 	// Diff colors
 	DiffAddColor  = adaptiveColor("#1E7A1E", "#98E481")
 	DiffDelColor  = adaptiveColor("#B42318", "#E48281")
@@ -55,7 +58,8 @@ var (
 			Background(SelectedBg).
 			Bold(true)
 
-	NormalItem = lipgloss.NewStyle().Foreground(TextColor)
+	NormalItem      = lipgloss.NewStyle().Foreground(TextColor)
+	SearchHighlight = lipgloss.NewStyle().Background(SearchMatchBg)
 
 	// Status indicators
 	AddedIndicator   = lipgloss.NewStyle().Foreground(AddedColor).SetString("+")
